@@ -155,7 +155,6 @@ def dm_chat(user1, user2):
             content = f.read()
         return content, 200, {'Content-Type': 'text/plain; charset=utf-8'}
 
-# === АВАТАРКИ ===
 @app.route('/avatar/<login>', methods=['POST'])
 def save_avatar(login):
     data = request.get_json()
@@ -183,7 +182,6 @@ def get_avatar(login):
         return '', 404
     return send_file(filepath, mimetype='image/png')
 
-# === ГОЛОСОВЫЕ ===
 @app.route('/voice', methods=['POST'])
 def upload_voice():
     if 'audio' not in request.files:
