@@ -3,12 +3,9 @@ import os
 import json
 import base64
 import datetime
-from io import BytesIO
-from PIL import Image
 
 app = Flask(__name__)
 
-# === ФАЙЛЫ ДЛЯ ХРАНЕНИЯ ===
 USERS_FILE = '/tmp/users.json'
 CHATS_PREFIX = '/tmp/chats_'
 AVATARS_DIR = '/tmp/avatars'
@@ -26,7 +23,6 @@ def save_users(users):
     with open(USERS_FILE, 'w') as f:
         json.dump(users, f)
 
-# === РЕГИСТРАЦИЯ ===
 @app.route('/register', methods=['POST'])
 def register():
     data = request.get_json()
@@ -50,7 +46,6 @@ def register():
     
     return jsonify({'status': 'OK'}), 200
 
-# === ВХОД ===
 @app.route('/login', methods=['POST'])
 def login():
     data = request.get_json()
@@ -73,13 +68,11 @@ def login():
         'displayName': users[login].get('displayName', login)
     }), 200
 
-# === СПИСОК ПОЛЬЗОВАТЕЛЕЙ ===
 @app.route('/users', methods=['GET'])
 def get_users():
     users = load_users()
     return jsonify(list(users.keys())), 200
 
-# === ЧАТЫ ПОЛЬЗОВАТЕЛЯ ===
 @app.route('/chats/<login>', methods=['GET'])
 def get_chats(login):
     chats_file = f'{CHATS_PREFIX}{login}.json'
@@ -111,7 +104,6 @@ def add_chat(login):
     
     return jsonify({'status': 'OK'}), 200
 
-# === ОБЩИЙ ЧАТ (СО ВРЕМЕНЕМ) ===
 @app.route('/messages.txt', methods=['GET', 'POST'])
 def messages():
     MESSAGES_FILE = '/tmp/messages.txt'
@@ -132,7 +124,6 @@ def messages():
             content = f.read()
         return content, 200, {'Content-Type': 'text/plain; charset=utf-8'}
 
-# === ЛИЧНЫЙ ЧАТ (СО ВРЕМЕНЕМ) ===
 @app.route('/dm/<user1>/<user2>', methods=['GET', 'POST'])
 def dm_chat(user1, user2):
     CHATS_DIR = '/tmp/chats'
@@ -157,7 +148,7 @@ def dm_chat(user1, user2):
             content = f.read()
         return content, 200, {'Content-Type': 'text/plain; charset=utf-8'}
 
-# === СОХРАНЕНИЕ АВАТАРКИ ===
+# === АВАТАРКИ (БЕЗ PILLOW) ===
 @app.route('/avatar/<login>', methods=['POST'])
 def save_avatar(login):
     data = request.get_json()
@@ -171,17 +162,13 @@ def save_avatar(login):
     
     try:
         img_data = base64.b64decode(avatar_data)
-        img = Image.open(BytesIO(img_data))
-        size = min(img.size)
-        img = img.crop((0, 0, size, size))
-        img = img.resize((150, 150))
         filepath = os.path.join(AVATARS_DIR, f"{login}.png")
-        img.save(filepath, 'PNG')
+        with open(filepath, 'wb') as f:
+            f.write(img_data)
         return jsonify({'status': 'OK'}), 200
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
-# === ПОЛУЧЕНИЕ АВАТАРКИ ===
 @app.route('/avatar/<login>', methods=['GET'])
 def get_avatar(login):
     filepath = os.path.join(AVATARS_DIR, f"{login}.png")
