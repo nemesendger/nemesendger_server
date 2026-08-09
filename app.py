@@ -4,17 +4,17 @@ import json
 
 app = Flask(__name__)
 
-# === ФАЙЛ ДЛЯ ХРАНЕНИЯ ПОЛЬЗОВАТЕЛЕЙ ===
+# === ФАЙЛЫ ДЛЯ ХРАНЕНИЯ ===
 USERS_FILE = '/tmp/users.json'
+CHATS_PREFIX = '/tmp/chats_'
 
-# === ЗАГРУЖАЕМ ПОЛЬЗОВАТЕЛЕЙ ===
+# === ЗАГРУЗКА ПОЛЬЗОВАТЕЛЕЙ ===
 def load_users():
     if not os.path.exists(USERS_FILE):
         return {}
     with open(USERS_FILE, 'r') as f:
         return json.load(f)
 
-# === СОХРАНЯЕМ ПОЛЬЗОВАТЕЛЕЙ ===
 def save_users(users):
     with open(USERS_FILE, 'w') as f:
         json.dump(users, f)
@@ -72,6 +72,38 @@ def get_users():
     users = load_users()
     return jsonify(list(users.keys())), 200
 
+# === ЧАТЫ ПОЛЬЗОВАТЕЛЯ ===
+@app.route('/chats/<login>', methods=['GET'])
+def get_chats(login):
+    chats_file = f'{CHATS_PREFIX}{login}.json'
+    if not os.path.exists(chats_file):
+        return jsonify([]), 200
+    with open(chats_file, 'r') as f:
+        chats = json.load(f)
+    return jsonify(chats), 200
+
+@app.route('/chats/<login>', methods=['POST'])
+def add_chat(login):
+    data = request.get_json()
+    chat_user = data.get('user')
+    if not chat_user:
+        return jsonify({'error': 'No user'}), 400
+    
+    chats_file = f'{CHATS_PREFIX}{login}.json'
+    if not os.path.exists(chats_file):
+        with open(chats_file, 'w') as f:
+            json.dump([], f)
+    
+    with open(chats_file, 'r') as f:
+        chats = json.load(f)
+    
+    if chat_user not in chats:
+        chats.append(chat_user)
+        with open(chats_file, 'w') as f:
+            json.dump(chats, f)
+    
+    return jsonify({'status': 'OK'}), 200
+
 # === ОБЩИЙ ЧАТ ===
 @app.route('/messages.txt', methods=['GET', 'POST'])
 def messages():
@@ -115,3 +147,6 @@ def dm_chat(user1, user2):
         with open(filepath, 'r') as f:
             content = f.read()
         return content, 200, {'Content-Type': 'text/plain; charset=utf-8'}
+
+if __name__ == '__main__':
+    app.run()
