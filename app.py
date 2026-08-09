@@ -122,7 +122,6 @@ def messages():
     if request.method == 'POST':
         data = request.get_data(as_text=True).strip()
         if data:
-            # Добавляем время от сервера
             now = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
             with open(MESSAGES_FILE, 'a') as f:
                 f.write(data + '|' + now + '\n')
@@ -158,7 +157,7 @@ def dm_chat(user1, user2):
             content = f.read()
         return content, 200, {'Content-Type': 'text/plain; charset=utf-8'}
 
-# === АВАТАРКИ ===
+# === СОХРАНЕНИЕ АВАТАРКИ ===
 @app.route('/avatar/<login>', methods=['POST'])
 def save_avatar(login):
     data = request.get_json()
@@ -182,6 +181,7 @@ def save_avatar(login):
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
+# === ПОЛУЧЕНИЕ АВАТАРКИ ===
 @app.route('/avatar/<login>', methods=['GET'])
 def get_avatar(login):
     filepath = os.path.join(AVATARS_DIR, f"{login}.png")
