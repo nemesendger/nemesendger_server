@@ -9,9 +9,12 @@ app = Flask(__name__)
 USERS_FILE = '/tmp/users.json'
 CHATS_PREFIX = '/tmp/chats_'
 AVATARS_DIR = '/tmp/avatars'
+VOICE_DIR = '/tmp/voice'  # ← НОВАЯ ПАПКА ДЛЯ ГОЛОСА
 
 if not os.path.exists(AVATARS_DIR):
     os.makedirs(AVATARS_DIR)
+if not os.path.exists(VOICE_DIR):
+    os.makedirs(VOICE_DIR)  # ← СОЗДАЁМ ПАПКУ
 
 def load_users():
     if not os.path.exists(USERS_FILE):
@@ -148,33 +151,29 @@ def dm_chat(user1, user2):
             content = f.read()
         return content, 200, {'Content-Type': 'text/plain; charset=utf-8'}
 
-# === АВАТАРКИ (БЕЗ PILLOW) ===
-@app.route('/avatar/<login>', methods=['POST'])
-def save_avatar(login):
-    data = request.get_json()
-    avatar_data = data.get('avatar')
-    
-    if not avatar_data:
-        return jsonify({'error': 'No avatar data'}), 400
-    
-    if ',' in avatar_data:
-        avatar_data = avatar_data.split(',')[1]
-    
-    try:
-        img_data = base64.b64decode(avatar_data)
-        filepath = os.path.join(AVATARS_DIR, f"{login}.png")
-        with open(filepath, 'wb') as f:
-            f.write(img_data)
-        return jsonify({'status': 'OK'}), 200
-    except Exception as e:
-        return jsonify({'error': str(e)}), 500
-
-@app.route('/avatar/<login>', methods=['GET'])
-def get_avatar(login):
-    filepath = os.path.join(AVATARS_DIR, f"{login}.png")
+# === ЗАГРУЗКА ГОЛОСОВОГО СООБЩЕНИЯ ===
+@app.route('/voice/<filename>', methods=['GET'])
+def get_voice(filename):
+    filepath = os.path.join(VOICE_DIR, filename)
     if not os.path.exists(filepath):
         return '', 404
-    return send_file(filepath, mimetype='image/png')
+    return send_file(filepath, mimetype='audio/amr')
+
+# === СОХРАНЕНИЕ ГОЛОСОВОГО СООБЩЕНИЯ ===
+@app.route('/voice', methods=['POST'])
+def upload_voice():
+    if 'audio' not in request.files:
+        return jsonify({'error': 'No audio file'}), 400
+    
+    file = request.files['audio']
+    filename = f"{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}_{file.filename}"
+    filepath = os.path.join(VOICE_DIR, filename)
+    file.save(filepath)
+    
+    return jsonify({
+        'status': 'OK',
+        'url': f'https://nemesendger-server.onrender.com/voice/{filename}'
+    }), 200
 
 if __name__ == '__main__':
     app.run()
