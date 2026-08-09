@@ -1,14 +1,21 @@
-from flask import Flask, request, jsonify
+from flask import Flask, request, jsonify, send_file
 import os
 import json
+import base64
+import datetime
+from io import BytesIO
+from PIL import Image
 
 app = Flask(__name__)
 
 # === ФАЙЛЫ ДЛЯ ХРАНЕНИЯ ===
 USERS_FILE = '/tmp/users.json'
 CHATS_PREFIX = '/tmp/chats_'
+AVATARS_DIR = '/tmp/avatars'
 
-# === ЗАГРУЗКА ПОЛЬЗОВАТЕЛЕЙ ===
+if not os.path.exists(AVATARS_DIR):
+    os.makedirs(AVATARS_DIR)
+
 def load_users():
     if not os.path.exists(USERS_FILE):
         return {}
@@ -104,7 +111,7 @@ def add_chat(login):
     
     return jsonify({'status': 'OK'}), 200
 
-# === ОБЩИЙ ЧАТ ===
+# === ОБЩИЙ ЧАТ (СО ВРЕМЕНЕМ) ===
 @app.route('/messages.txt', methods=['GET', 'POST'])
 def messages():
     MESSAGES_FILE = '/tmp/messages.txt'
@@ -115,8 +122,10 @@ def messages():
     if request.method == 'POST':
         data = request.get_data(as_text=True).strip()
         if data:
+            # Добавляем время от сервера
+            now = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
             with open(MESSAGES_FILE, 'a') as f:
-                f.write(data + '\n')
+                f.write(data + '|' + now + '\n')
             return 'OK', 200
         return 'Empty', 400
     else:
@@ -124,7 +133,7 @@ def messages():
             content = f.read()
         return content, 200, {'Content-Type': 'text/plain; charset=utf-8'}
 
-# === ЛИЧНЫЙ ЧАТ ===
+# === ЛИЧНЫЙ ЧАТ (СО ВРЕМЕНЕМ) ===
 @app.route('/dm/<user1>/<user2>', methods=['GET', 'POST'])
 def dm_chat(user1, user2):
     CHATS_DIR = '/tmp/chats'
@@ -137,8 +146,9 @@ def dm_chat(user1, user2):
     if request.method == 'POST':
         data = request.get_data(as_text=True).strip()
         if data:
+            now = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
             with open(filepath, 'a') as f:
-                f.write(data + '\n')
+                f.write(data + '|' + now + '\n')
             return 'OK', 200
         return 'Empty', 400
     else:
@@ -147,6 +157,37 @@ def dm_chat(user1, user2):
         with open(filepath, 'r') as f:
             content = f.read()
         return content, 200, {'Content-Type': 'text/plain; charset=utf-8'}
+
+# === АВАТАРКИ ===
+@app.route('/avatar/<login>', methods=['POST'])
+def save_avatar(login):
+    data = request.get_json()
+    avatar_data = data.get('avatar')
+    
+    if not avatar_data:
+        return jsonify({'error': 'No avatar data'}), 400
+    
+    if ',' in avatar_data:
+        avatar_data = avatar_data.split(',')[1]
+    
+    try:
+        img_data = base64.b64decode(avatar_data)
+        img = Image.open(BytesIO(img_data))
+        size = min(img.size)
+        img = img.crop((0, 0, size, size))
+        img = img.resize((150, 150))
+        filepath = os.path.join(AVATARS_DIR, f"{login}.png")
+        img.save(filepath, 'PNG')
+        return jsonify({'status': 'OK'}), 200
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/avatar/<login>', methods=['GET'])
+def get_avatar(login):
+    filepath = os.path.join(AVATARS_DIR, f"{login}.png")
+    if not os.path.exists(filepath):
+        return '', 404
+    return send_file(filepath, mimetype='image/png')
 
 if __name__ == '__main__':
     app.run()
