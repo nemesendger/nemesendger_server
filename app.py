@@ -206,3 +206,54 @@ def get_voice(filename):
 
 if __name__ == '__main__':
     app.run()
+# === ЗВОНКИ (СИГНАЛИЗАЦИЯ) ===
+CALLS_DIR = '/tmp/calls'
+if not os.path.exists(CALLS_DIR):
+    os.makedirs(CALLS_DIR)
+
+@app.route('/call/<from_user>/<to_user>', methods=['POST'])
+def call_user(from_user, to_user):
+    data = request.get_json()
+    call_type = data.get('type')
+    payload = data.get('payload')
+    
+    call_file = os.path.join(CALLS_DIR, f"{from_user}_{to_user}.json")
+    
+    call_data = {}
+    if os.path.exists(call_file):
+        with open(call_file, 'r') as f:
+            call_data = json.load(f)
+    
+    if call_type == 'offer':
+        call_data['offer'] = payload
+    elif call_type == 'answer':
+        call_data['answer'] = payload
+    elif call_type == 'candidate':
+        if 'candidates' not in call_data:
+            call_data['candidates'] = []
+        call_data['candidates'].append(payload)
+    
+    with open(call_file, 'w') as f:
+        json.dump(call_data, f)
+    
+    return jsonify({'status': 'OK'}), 200
+
+@app.route('/call/<from_user>/<to_user>', methods=['GET'])
+def get_call(from_user, to_user):
+    call_file = os.path.join(CALLS_DIR, f"{from_user}_{to_user}.json")
+    if not os.path.exists(call_file):
+        return jsonify({}), 200
+    
+    with open(call_file, 'r') as f:
+        data = json.load(f)
+    
+    os.remove(call_file)
+    
+    return jsonify(data), 200
+
+@app.route('/call/end/<from_user>/<to_user>', methods=['POST'])
+def end_call(from_user, to_user):
+    call_file = os.path.join(CALLS_DIR, f"{from_user}_{to_user}.json")
+    if os.path.exists(call_file):
+        os.remove(call_file)
+    return jsonify({'status': 'OK'}), 200
