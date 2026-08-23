@@ -6,6 +6,7 @@ import datetime
 
 app = Flask(__name__)
 
+# === ФАЙЛЫ ДЛЯ ХРАНЕНИЯ ===
 USERS_FILE = '/tmp/users.json'
 CHATS_PREFIX = '/tmp/chats_'
 AVATARS_DIR = '/tmp/avatars'
@@ -26,10 +27,7 @@ def save_users(users):
     with open(USERS_FILE, 'w') as f:
         json.dump(users, f)
 
-@app.route('/')
-def index():
-    return 'Nemesenger server works!'
-
+# === РЕГИСТРАЦИЯ ===
 @app.route('/register', methods=['POST'])
 def register():
     data = request.get_json()
@@ -53,6 +51,7 @@ def register():
     
     return jsonify({'status': 'OK'}), 200
 
+# === ВХОД ===
 @app.route('/login', methods=['POST'])
 def login():
     data = request.get_json()
@@ -75,11 +74,13 @@ def login():
         'displayName': users[login].get('displayName', login)
     }), 200
 
+# === СПИСОК ПОЛЬЗОВАТЕЛЕЙ ===
 @app.route('/users', methods=['GET'])
 def get_users():
     users = load_users()
     return jsonify(list(users.keys())), 200
 
+# === ЧАТЫ ПОЛЬЗОВАТЕЛЯ ===
 @app.route('/chats/<login>', methods=['GET'])
 def get_chats(login):
     chats_file = f'{CHATS_PREFIX}{login}.json'
@@ -111,6 +112,7 @@ def add_chat(login):
     
     return jsonify({'status': 'OK'}), 200
 
+# === ОБЩИЙ ЧАТ (СО ВРЕМЕНЕМ) ===
 @app.route('/messages.txt', methods=['GET', 'POST'])
 def messages():
     MESSAGES_FILE = '/tmp/messages.txt'
@@ -131,6 +133,7 @@ def messages():
             content = f.read()
         return content, 200, {'Content-Type': 'text/plain; charset=utf-8'}
 
+# === ЛИЧНЫЙ ЧАТ (СО ВРЕМЕНЕМ) ===
 @app.route('/dm/<user1>/<user2>', methods=['GET', 'POST'])
 def dm_chat(user1, user2):
     CHATS_DIR = '/tmp/chats'
@@ -155,6 +158,7 @@ def dm_chat(user1, user2):
             content = f.read()
         return content, 200, {'Content-Type': 'text/plain; charset=utf-8'}
 
+# === АВАТАРКИ ===
 @app.route('/avatar/<login>', methods=['POST'])
 def save_avatar(login):
     data = request.get_json()
@@ -182,13 +186,22 @@ def get_avatar(login):
         return '', 404
     return send_file(filepath, mimetype='image/png')
 
+# === ЗАГРУЗКА ГОЛОСОВОГО СООБЩЕНИЯ ===
+@app.route('/voice/<filename>', methods=['GET'])
+def get_voice(filename):
+    filepath = os.path.join(VOICE_DIR, filename)
+    if not os.path.exists(filepath):
+        return '', 404
+    return send_file(filepath, mimetype='audio/amr')
+
+# === СОХРАНЕНИЕ ГОЛОСОВОГО СООБЩЕНИЯ ===
 @app.route('/voice', methods=['POST'])
 def upload_voice():
     if 'audio' not in request.files:
         return jsonify({'error': 'No audio file'}), 400
     
     file = request.files['audio']
-    filename = f"{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.amr"
+    filename = f"{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}_{file.filename}"
     filepath = os.path.join(VOICE_DIR, filename)
     file.save(filepath)
     
@@ -197,63 +210,41 @@ def upload_voice():
         'url': f'https://nemesendger-server.onrender.com/voice/{filename}'
     }), 200
 
-@app.route('/voice/<filename>', methods=['GET'])
-def get_voice(filename):
-    filepath = os.path.join(VOICE_DIR, filename)
-    if not os.path.exists(filepath):
-        return '', 404
-    return send_file(filepath, mimetype='audio/amr')
+# === УДАЛЕНИЕ АККАУНТА ===
+@app.route('/delete_user', methods=['POST'])
+def delete_user():
+    data = request.get_json()
+    login = data.get('login')
+    password = data.get('password')
+    
+    if not login or not password:
+        return jsonify({'error': 'Логин и пароль обязательны'}), 400
+    
+    users = load_users()
+    
+    if login not in users:
+        return jsonify({'error': 'Пользователь не найден'}), 404
+    
+    if users[login]['password'] != password:
+        return jsonify({'error': 'Неверный пароль'}), 401
+    
+    # Удаляем пользователя
+    del users[login]
+    save_users(users)
+    
+    # Удаляем файлы пользователя (аватарка, чаты)
+    try:
+        avatar_path = os.path.join(AVATARS_DIR, f"{login}.png")
+        if os.path.exists(avatar_path):
+            os.remove(avatar_path)
+        
+        chats_file = f'{CHATS_PREFIX}{login}.json'
+        if os.path.exists(chats_file):
+            os.remove(chats_file)
+    except:
+        pass
+    
+    return jsonify({'status': 'OK'}), 200
 
 if __name__ == '__main__':
     app.run()
-# === ЗВОНКИ (СИГНАЛИЗАЦИЯ) ===
-CALLS_DIR = '/tmp/calls'
-if not os.path.exists(CALLS_DIR):
-    os.makedirs(CALLS_DIR)
-
-@app.route('/call/<from_user>/<to_user>', methods=['POST'])
-def call_user(from_user, to_user):
-    data = request.get_json()
-    call_type = data.get('type')
-    payload = data.get('payload')
-    
-    call_file = os.path.join(CALLS_DIR, f"{from_user}_{to_user}.json")
-    
-    call_data = {}
-    if os.path.exists(call_file):
-        with open(call_file, 'r') as f:
-            call_data = json.load(f)
-    
-    if call_type == 'offer':
-        call_data['offer'] = payload
-    elif call_type == 'answer':
-        call_data['answer'] = payload
-    elif call_type == 'candidate':
-        if 'candidates' not in call_data:
-            call_data['candidates'] = []
-        call_data['candidates'].append(payload)
-    
-    with open(call_file, 'w') as f:
-        json.dump(call_data, f)
-    
-    return jsonify({'status': 'OK'}), 200
-
-@app.route('/call/<from_user>/<to_user>', methods=['GET'])
-def get_call(from_user, to_user):
-    call_file = os.path.join(CALLS_DIR, f"{from_user}_{to_user}.json")
-    if not os.path.exists(call_file):
-        return jsonify({}), 200
-    
-    with open(call_file, 'r') as f:
-        data = json.load(f)
-    
-    os.remove(call_file)
-    
-    return jsonify(data), 200
-
-@app.route('/call/end/<from_user>/<to_user>', methods=['POST'])
-def end_call(from_user, to_user):
-    call_file = os.path.join(CALLS_DIR, f"{from_user}_{to_user}.json")
-    if os.path.exists(call_file):
-        os.remove(call_file)
-    return jsonify({'status': 'OK'}), 200
