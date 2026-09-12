@@ -11,11 +11,14 @@ USERS_FILE = '/tmp/users.json'
 CHATS_PREFIX = '/tmp/chats_'
 AVATARS_DIR = '/tmp/avatars'
 VOICE_DIR = '/tmp/voice'
+PHOTOS_DIR = '/tmp/photos'
 
 if not os.path.exists(AVATARS_DIR):
     os.makedirs(AVATARS_DIR)
 if not os.path.exists(VOICE_DIR):
     os.makedirs(VOICE_DIR)
+if not os.path.exists(PHOTOS_DIR):
+    os.makedirs(PHOTOS_DIR)
 
 def load_users():
     if not os.path.exists(USERS_FILE):
@@ -112,7 +115,7 @@ def add_chat(login):
     
     return jsonify({'status': 'OK'}), 200
 
-# === ОБЩИЙ ЧАТ (СО ВРЕМЕНЕМ) ===
+# === ОБЩИЙ ЧАТ ===
 @app.route('/messages.txt', methods=['GET', 'POST'])
 def messages():
     MESSAGES_FILE = '/tmp/messages.txt'
@@ -133,7 +136,7 @@ def messages():
             content = f.read()
         return content, 200, {'Content-Type': 'text/plain; charset=utf-8'}
 
-# === ЛИЧНЫЙ ЧАТ (СО ВРЕМЕНЕМ) ===
+# === ЛИЧНЫЙ ЧАТ ===
 @app.route('/dm/<user1>/<user2>', methods=['GET', 'POST'])
 def dm_chat(user1, user2):
     CHATS_DIR = '/tmp/chats'
@@ -186,7 +189,7 @@ def get_avatar(login):
         return '', 404
     return send_file(filepath, mimetype='image/png')
 
-# === ЗАГРУЗКА ГОЛОСОВОГО СООБЩЕНИЯ ===
+# === ГОЛОСОВЫЕ ===
 @app.route('/voice/<filename>', methods=['GET'])
 def get_voice(filename):
     filepath = os.path.join(VOICE_DIR, filename)
@@ -194,7 +197,6 @@ def get_voice(filename):
         return '', 404
     return send_file(filepath, mimetype='audio/amr')
 
-# === СОХРАНЕНИЕ ГОЛОСОВОГО СООБЩЕНИЯ ===
 @app.route('/voice', methods=['POST'])
 def upload_voice():
     if 'audio' not in request.files:
@@ -208,6 +210,29 @@ def upload_voice():
     return jsonify({
         'status': 'OK',
         'url': f'https://nemesendger-server.onrender.com/voice/{filename}'
+    }), 200
+
+# === ФОТО ===
+@app.route('/photo/<filename>', methods=['GET'])
+def get_photo(filename):
+    filepath = os.path.join(PHOTOS_DIR, filename)
+    if not os.path.exists(filepath):
+        return '', 404
+    return send_file(filepath)
+
+@app.route('/photo', methods=['POST'])
+def upload_photo():
+    if 'photo' not in request.files:
+        return jsonify({'error': 'No photo'}), 400
+    
+    file = request.files['photo']
+    filename = f"{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}_{file.filename}"
+    filepath = os.path.join(PHOTOS_DIR, filename)
+    file.save(filepath)
+    
+    return jsonify({
+        'status': 'OK',
+        'url': f'https://nemesendger-server.onrender.com/photo/{filename}'
     }), 200
 
 # === УДАЛЕНИЕ АККАУНТА ===
@@ -228,11 +253,9 @@ def delete_user():
     if users[login]['password'] != password:
         return jsonify({'error': 'Неверный пароль'}), 401
     
-    # Удаляем пользователя
     del users[login]
     save_users(users)
     
-    # Удаляем файлы пользователя (аватарка, чаты)
     try:
         avatar_path = os.path.join(AVATARS_DIR, f"{login}.png")
         if os.path.exists(avatar_path):
