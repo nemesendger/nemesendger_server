@@ -41,6 +41,12 @@ def register():
     if not login or not password:
         return jsonify({'error': 'Логин и пароль обязательны'}), 400
     
+    if len(login) > 20:
+        return jsonify({'error': 'Логин не более 20 символов'}), 400
+    
+    if display_name and len(display_name) > 20:
+        return jsonify({'error': 'Имя не более 20 символов'}), 400
+    
     users = load_users()
     
     if login in users:
