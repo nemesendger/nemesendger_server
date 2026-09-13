@@ -6,6 +6,9 @@ import datetime
 
 app = Flask(__name__)
 
+# === ПАРОЛЬ АДМИНА ===
+ADMIN_PASSWORD = "1230908070605gg"
+
 # === ФАЙЛЫ ДЛЯ ХРАНЕНИЯ ===
 USERS_FILE = '/tmp/users.json'
 CHATS_PREFIX = '/tmp/chats_'
@@ -267,7 +270,7 @@ def upload_video():
         'url': f'https://nemesendger-server.onrender.com/video/{filename}'
     }), 200
 
-# === УДАЛЕНИЕ АККАУНТА ===
+# === УДАЛЕНИЕ АККАУНТА (самим пользователем) ===
 @app.route('/delete_user', methods=['POST'])
 def delete_user():
     data = request.get_json()
@@ -298,6 +301,63 @@ def delete_user():
             os.remove(chats_file)
     except:
         pass
+    
+    return jsonify({'status': 'OK'}), 200
+
+# ============================================================
+# === АДМИНКА ================================================
+# ============================================================
+
+@app.route('/admin/users', methods=['GET'])
+def admin_users():
+    pwd = request.args.get('pwd', '')
+    if pwd != ADMIN_PASSWORD:
+        return jsonify({'error': 'Unauthorized'}), 401
+    
+    users = load_users()
+    result = []
+    for login, data in users.items():
+        result.append({
+            'login': login,
+            'displayName': data.get('displayName', login)
+        })
+    return jsonify(result), 200
+
+@app.route('/admin/delete_user', methods=['POST'])
+def admin_delete_user():
+    data = request.get_json()
+    if data.get('pwd', '') != ADMIN_PASSWORD:
+        return jsonify({'error': 'Unauthorized'}), 401
+    
+    login = data.get('login')
+    users = load_users()
+    
+    if login in users:
+        del users[login]
+        save_users(users)
+        
+        try:
+            avatar_path = os.path.join(AVATARS_DIR, f"{login}.png")
+            if os.path.exists(avatar_path):
+                os.remove(avatar_path)
+            
+            chats_file = f'{CHATS_PREFIX}{login}.json'
+            if os.path.exists(chats_file):
+                os.remove(chats_file)
+        except:
+            pass
+    
+    return jsonify({'status': 'OK'}), 200
+
+@app.route('/admin/clear_global', methods=['POST'])
+def admin_clear_global():
+    data = request.get_json()
+    if data.get('pwd', '') != ADMIN_PASSWORD:
+        return jsonify({'error': 'Unauthorized'}), 401
+    
+    MESSAGES_FILE = '/tmp/messages.txt'
+    with open(MESSAGES_FILE, 'w') as f:
+        f.write('')
     
     return jsonify({'status': 'OK'}), 200
 
