@@ -12,6 +12,7 @@ CHATS_PREFIX = '/tmp/chats_'
 AVATARS_DIR = '/tmp/avatars'
 VOICE_DIR = '/tmp/voice'
 PHOTOS_DIR = '/tmp/photos'
+VIDEO_DIR = '/tmp/video'
 
 if not os.path.exists(AVATARS_DIR):
     os.makedirs(AVATARS_DIR)
@@ -19,6 +20,8 @@ if not os.path.exists(VOICE_DIR):
     os.makedirs(VOICE_DIR)
 if not os.path.exists(PHOTOS_DIR):
     os.makedirs(PHOTOS_DIR)
+if not os.path.exists(VIDEO_DIR):
+    os.makedirs(VIDEO_DIR)
 
 def load_users():
     if not os.path.exists(USERS_FILE):
@@ -239,6 +242,29 @@ def upload_photo():
     return jsonify({
         'status': 'OK',
         'url': f'https://nemesendger-server.onrender.com/photo/{filename}'
+    }), 200
+
+# === ВИДЕО ===
+@app.route('/video/<filename>', methods=['GET'])
+def get_video(filename):
+    filepath = os.path.join(VIDEO_DIR, filename)
+    if not os.path.exists(filepath):
+        return '', 404
+    return send_file(filepath, mimetype='video/mp4')
+
+@app.route('/video', methods=['POST'])
+def upload_video():
+    if 'video' not in request.files:
+        return jsonify({'error': 'No video'}), 400
+    
+    file = request.files['video']
+    filename = f"{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}_{file.filename}"
+    filepath = os.path.join(VIDEO_DIR, filename)
+    file.save(filepath)
+    
+    return jsonify({
+        'status': 'OK',
+        'url': f'https://nemesendger-server.onrender.com/video/{filename}'
     }), 200
 
 # === УДАЛЕНИЕ АККАУНТА ===
