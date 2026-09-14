@@ -12,9 +12,11 @@ def now_msk():
     return datetime.datetime.now(MSK).strftime("%Y-%m-%d %H:%M:%S")
 
 ADMIN_PASSWORD = "1230908070605gg"
+OWNER_LOGIN = "nemesendger_official"
 
 USERS_FILE = '/tmp/users.json'
 BANNED_FILE = '/tmp/banned.json'
+ADMINS_FILE = '/tmp/admins.json'
 CHATS_PREFIX = '/tmp/chats_'
 AVATARS_DIR = '/tmp/avatars'
 VOICE_DIR = '/tmp/voice'
@@ -24,20 +26,9 @@ READ_DIR = '/tmp/read'
 ONLINE_DIR = '/tmp/online'
 TYPING_DIR = '/tmp/typing'
 
-if not os.path.exists(AVATARS_DIR):
-    os.makedirs(AVATARS_DIR)
-if not os.path.exists(VOICE_DIR):
-    os.makedirs(VOICE_DIR)
-if not os.path.exists(PHOTOS_DIR):
-    os.makedirs(PHOTOS_DIR)
-if not os.path.exists(VIDEO_DIR):
-    os.makedirs(VIDEO_DIR)
-if not os.path.exists(READ_DIR):
-    os.makedirs(READ_DIR)
-if not os.path.exists(ONLINE_DIR):
-    os.makedirs(ONLINE_DIR)
-if not os.path.exists(TYPING_DIR):
-    os.makedirs(TYPING_DIR)
+for d in [AVATARS_DIR, VOICE_DIR, PHOTOS_DIR, VIDEO_DIR, READ_DIR, ONLINE_DIR, TYPING_DIR]:
+    if not os.path.exists(d):
+        os.makedirs(d)
 
 def load_users():
     if not os.path.exists(USERS_FILE):
@@ -58,6 +49,16 @@ def load_banned():
 def save_banned(banned):
     with open(BANNED_FILE, 'w') as f:
         json.dump(banned, f)
+
+def load_admins():
+    if not os.path.exists(ADMINS_FILE):
+        return []
+    with open(ADMINS_FILE, 'r') as f:
+        return json.load(f)
+
+def save_admins(admins):
+    with open(ADMINS_FILE, 'w') as f:
+        json.dump(admins, f)
 
 def add_to_chat_list(owner, other):
     if not owner or not other or owner == other:
@@ -82,19 +83,15 @@ def register():
 
     if not login or not password:
         return jsonify({'error': 'Логин и пароль обязательны'}), 400
-
     if len(login) > 20:
         return jsonify({'error': 'Логин не более 20 символов'}), 400
-
     if display_name and len(display_name) > 20:
         return jsonify({'error': 'Имя не более 20 символов'}), 400
 
-    banned = load_banned()
-    if login in banned:
+    if login in load_banned():
         return jsonify({'error': 'Этот логин заблокирован администратором'}), 403
 
     users = load_users()
-
     if login in users:
         return jsonify({'error': 'Пользователь уже существует'}), 400
 
@@ -103,7 +100,6 @@ def register():
         'displayName': display_name or login
     }
     save_users(users)
-
     return jsonify({'status': 'OK'}), 200
 
 @app.route('/login', methods=['POST'])
@@ -114,16 +110,12 @@ def login():
 
     if not login or not password:
         return jsonify({'error': 'Логин и пароль обязательны'}), 400
-
-    banned = load_banned()
-    if login in banned:
+    if login in load_banned():
         return jsonify({'error': 'Ваш аккаунт заблокирован администратором'}), 403
 
     users = load_users()
-
     if login not in users:
         return jsonify({'error': 'Пользователь не найден'}), 404
-
     if users[login]['password'] != password:
         return jsonify({'error': 'Неверный пароль'}), 401
 
@@ -137,14 +129,51 @@ def get_users():
     users = load_users()
     return jsonify(list(users.keys())), 200
 
+# === РОЛИ ===
+@app.route('/admins', methods=['GET'])
+def get_admins():
+    return jsonify(load_admins()), 200
+
+@app.route('/admin/add_admin', methods=['POST'])
+def admin_add_admin():
+    data = request.get_json()
+    if data.get('pwd', '') != ADMIN_PASSWORD:
+        return jsonify({'error': 'Unauthorized'}), 401
+
+    login = data.get('login')
+    if not login:
+        return jsonify({'error': 'No login'}), 400
+    if login == OWNER_LOGIN:
+        return jsonify({'error': 'Владелец уже владелец'}), 400
+
+    admins = load_admins()
+    if login not in admins:
+        admins.append(login)
+        save_admins(admins)
+
+    return jsonify({'status': 'OK'}), 200
+
+@app.route('/admin/remove_admin', methods=['POST'])
+def admin_remove_admin():
+    data = request.get_json()
+    if data.get('pwd', '') != ADMIN_PASSWORD:
+        return jsonify({'error': 'Unauthorized'}), 401
+
+    login = data.get('login')
+    admins = load_admins()
+    if login in admins:
+        admins.remove(login)
+        save_admins(admins)
+
+    return jsonify({'status': 'OK'}), 200
+
 @app.route('/chats/<login>', methods=['GET'])
 def get_chats(login):
     chats_file = f'{CHATS_PREFIX}{login}.json'
     if not os.path.exists(chats_file):
         return jsonify([]), 200
     with open(chats_file, 'r') as f:
-        chats = json.load(f)
-    return jsonify(chats), 200
+        return jsonify(json.load(f)), 200
 
 @app.route('/chats/<login>', methods=['POST'])
 def add_chat(login):
@@ -152,20 +181,7 @@ def add_chat(login):
     chat_user = data.get('user')
     if not chat_user:
         return jsonify({'error': 'No user'}), 400
-
-    chats_file = f'{CHATS_PREFIX}{login}.json'
-    if not os.path.exists(chats_file):
-        with open(chats_file, 'w') as f:
-            json.dump([], f)
-
-    with open(chats_file, 'r') as f:
-        chats = json.load(f)
-
-    if chat_user not in chats:
-        chats.append(chat_user)
-        with open(chats_file, 'w') as f:
-            json.dump(chats, f)
-
+    add_to_chat_list(login, chat_user)
     return jsonify({'status': 'OK'}), 200
 
 @app.route('/messages.txt', methods=['GET', 'POST'])
@@ -174,7 +190,6 @@ def messages():
     if not os.path.exists(MESSAGES_FILE):
         with open(MESSAGES_FILE, 'w') as f:
             f.write('')
-
     if request.method == 'POST':
         data = request.get_data(as_text=True).strip()
         if data:
@@ -193,10 +208,8 @@ def dm_chat(user1, user2):
     CHATS_DIR = '/tmp/chats'
     if not os.path.exists(CHATS_DIR):
         os.makedirs(CHATS_DIR)
-
     key = '_'.join(sorted([user1.lower(), user2.lower()]))
     filepath = os.path.join(CHATS_DIR, f"{key}.txt")
-
     if request.method == 'POST':
         data = request.get_data(as_text=True).strip()
         if data:
@@ -221,10 +234,8 @@ def delete_message():
     me = data.get('me')
     recipient = data.get('recipient')
     line = data.get('line')
-
     if not chat_type or not line:
         return jsonify({'error': 'Missing params'}), 400
-
     if chat_type == 'global':
         filepath = '/tmp/messages.txt'
     elif chat_type == 'dm':
@@ -234,27 +245,21 @@ def delete_message():
         filepath = f'/tmp/chats/{key}.txt'
     else:
         return jsonify({'error': 'Bad chat_type'}), 400
-
     if not os.path.exists(filepath):
         return jsonify({'status': 'OK'}), 200
-
     with open(filepath, 'r') as f:
         lines = f.readlines()
-
     new_lines = [l for l in lines if l.rstrip('\n') != line]
-
     with open(filepath, 'w') as f:
         f.writelines(new_lines)
-
     return jsonify({'status': 'OK'}), 200
 
 @app.route('/read/<chat_id>/<user>', methods=['GET', 'POST'])
 def read_status(chat_id, user):
     filepath = os.path.join(READ_DIR, f"{chat_id}_{user}.txt")
     if request.method == 'POST':
-        now = now_msk()
         with open(filepath, 'w') as f:
-            f.write(now)
+            f.write(now_msk())
         return 'OK', 200
     else:
         if not os.path.exists(filepath):
@@ -266,9 +271,8 @@ def read_status(chat_id, user):
 def online_status(user):
     filepath = os.path.join(ONLINE_DIR, f"{user}.txt")
     if request.method == 'POST':
-        now = now_msk()
         with open(filepath, 'w') as f:
-            f.write(now)
+            f.write(now_msk())
         return 'OK', 200
     else:
         if not os.path.exists(filepath):
@@ -276,14 +280,12 @@ def online_status(user):
         with open(filepath, 'r') as f:
             return f.read(), 200
 
-# === ПЕЧАТАЕТ ===
 @app.route('/typing/<chat_id>/<user>', methods=['GET', 'POST'])
 def typing_status(chat_id, user):
     filepath = os.path.join(TYPING_DIR, f"{chat_id}_{user}.txt")
     if request.method == 'POST':
-        now = now_msk()
         with open(filepath, 'w') as f:
-            f.write(now)
+            f.write(now_msk())
         return 'OK', 200
     else:
         if not os.path.exists(filepath):
@@ -295,13 +297,10 @@ def typing_status(chat_id, user):
 def save_avatar(login):
     data = request.get_json()
     avatar_data = data.get('avatar')
-
     if not avatar_data:
         return jsonify({'error': 'No avatar data'}), 400
-
     if ',' in avatar_data:
         avatar_data = avatar_data.split(',')[1]
-
     try:
         img_data = base64.b64decode(avatar_data)
         filepath = os.path.join(AVATARS_DIR, f"{login}.png")
@@ -329,16 +328,12 @@ def get_voice(filename):
 def upload_voice():
     if 'audio' not in request.files:
         return jsonify({'error': 'No audio file'}), 400
-
     file = request.files['audio']
     filename = f"{datetime.datetime.now(MSK).strftime('%Y%m%d_%H%M%S')}_{file.filename}"
     filepath = os.path.join(VOICE_DIR, filename)
     file.save(filepath)
-
-    return jsonify({
-        'status': 'OK',
-        'url': f'https://nemesendger-server.onrender.com/voice/{filename}'
-    }), 200
+    return jsonify({'status': 'OK',
+                    'url': f'https://nemesendger-server.onrender.com/voice/{filename}'}), 200
 
 @app.route('/photo/<filename>', methods=['GET'])
 def get_photo(filename):
@@ -351,16 +346,12 @@ def get_photo(filename):
 def upload_photo():
     if 'photo' not in request.files:
         return jsonify({'error': 'No photo'}), 400
-
     file = request.files['photo']
     filename = f"{datetime.datetime.now(MSK).strftime('%Y%m%d_%H%M%S')}_{file.filename}"
     filepath = os.path.join(PHOTOS_DIR, filename)
     file.save(filepath)
-
-    return jsonify({
-        'status': 'OK',
-        'url': f'https://nemesendger-server.onrender.com/photo/{filename}'
-    }), 200
+    return jsonify({'status': 'OK',
+                    'url': f'https://nemesendger-server.onrender.com/photo/{filename}'}), 200
 
 @app.route('/video/<filename>', methods=['GET'])
 def get_video(filename):
@@ -373,48 +364,36 @@ def get_video(filename):
 def upload_video():
     if 'video' not in request.files:
         return jsonify({'error': 'No video'}), 400
-
     file = request.files['video']
     filename = f"{datetime.datetime.now(MSK).strftime('%Y%m%d_%H%M%S')}_{file.filename}"
     filepath = os.path.join(VIDEO_DIR, filename)
     file.save(filepath)
-
-    return jsonify({
-        'status': 'OK',
-        'url': f'https://nemesendger-server.onrender.com/video/{filename}'
-    }), 200
+    return jsonify({'status': 'OK',
+                    'url': f'https://nemesendger-server.onrender.com/video/{filename}'}), 200
 
 @app.route('/delete_user', methods=['POST'])
 def delete_user():
     data = request.get_json()
     login = data.get('login')
     password = data.get('password')
-
     if not login or not password:
         return jsonify({'error': 'Логин и пароль обязательны'}), 400
-
     users = load_users()
-
     if login not in users:
         return jsonify({'error': 'Пользователь не найден'}), 404
-
     if users[login]['password'] != password:
         return jsonify({'error': 'Неверный пароль'}), 401
-
     del users[login]
     save_users(users)
-
     try:
         avatar_path = os.path.join(AVATARS_DIR, f"{login}.png")
         if os.path.exists(avatar_path):
             os.remove(avatar_path)
-
         chats_file = f'{CHATS_PREFIX}{login}.json'
         if os.path.exists(chats_file):
             os.remove(chats_file)
     except:
         pass
-
     return jsonify({'status': 'OK'}), 200
 
 # === АДМИНКА ===
@@ -423,7 +402,6 @@ def admin_users():
     pwd = request.args.get('pwd', '')
     if pwd != ADMIN_PASSWORD:
         return jsonify({'error': 'Unauthorized'}), 401
-
     users = load_users()
     result = []
     for login, data in users.items():
@@ -438,7 +416,6 @@ def admin_banned():
     pwd = request.args.get('pwd', '')
     if pwd != ADMIN_PASSWORD:
         return jsonify({'error': 'Unauthorized'}), 401
-
     return jsonify(load_banned()), 200
 
 @app.route('/admin/delete_user', methods=['POST'])
@@ -446,25 +423,20 @@ def admin_delete_user():
     data = request.get_json()
     if data.get('pwd', '') != ADMIN_PASSWORD:
         return jsonify({'error': 'Unauthorized'}), 401
-
     login = data.get('login')
     users = load_users()
-
     if login in users:
         del users[login]
         save_users(users)
-
         try:
             avatar_path = os.path.join(AVATARS_DIR, f"{login}.png")
             if os.path.exists(avatar_path):
                 os.remove(avatar_path)
-
             chats_file = f'{CHATS_PREFIX}{login}.json'
             if os.path.exists(chats_file):
                 os.remove(chats_file)
         except:
             pass
-
     return jsonify({'status': 'OK'}), 200
 
 @app.route('/admin/ban_user', methods=['POST'])
@@ -472,32 +444,26 @@ def admin_ban_user():
     data = request.get_json()
     if data.get('pwd', '') != ADMIN_PASSWORD:
         return jsonify({'error': 'Unauthorized'}), 401
-
     login = data.get('login')
     if not login:
         return jsonify({'error': 'No login'}), 400
-
     banned = load_banned()
     if login not in banned:
         banned.append(login)
         save_banned(banned)
-
     users = load_users()
     if login in users:
         del users[login]
         save_users(users)
-
         try:
             avatar_path = os.path.join(AVATARS_DIR, f"{login}.png")
             if os.path.exists(avatar_path):
                 os.remove(avatar_path)
-
             chats_file = f'{CHATS_PREFIX}{login}.json'
             if os.path.exists(chats_file):
                 os.remove(chats_file)
         except:
             pass
-
     return jsonify({'status': 'OK'}), 200
 
 @app.route('/admin/unban_user', methods=['POST'])
@@ -505,16 +471,13 @@ def admin_unban_user():
     data = request.get_json()
     if data.get('pwd', '') != ADMIN_PASSWORD:
         return jsonify({'error': 'Unauthorized'}), 401
-
     login = data.get('login')
     if not login:
         return jsonify({'error': 'No login'}), 400
-
     banned = load_banned()
     if login in banned:
         banned.remove(login)
         save_banned(banned)
-
     return jsonify({'status': 'OK'}), 200
 
 @app.route('/admin/clear_global', methods=['POST'])
@@ -522,11 +485,8 @@ def admin_clear_global():
     data = request.get_json()
     if data.get('pwd', '') != ADMIN_PASSWORD:
         return jsonify({'error': 'Unauthorized'}), 401
-
-    MESSAGES_FILE = '/tmp/messages.txt'
-    with open(MESSAGES_FILE, 'w') as f:
+    with open('/tmp/messages.txt', 'w') as f:
         f.write('')
-
     return jsonify({'status': 'OK'}), 200
 
 if __name__ == '__main__':
