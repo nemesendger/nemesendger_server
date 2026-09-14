@@ -6,10 +6,8 @@ import datetime
 
 app = Flask(__name__)
 
-# === ПАРОЛЬ АДМИНА ===
 ADMIN_PASSWORD = "1230908070605gg"
 
-# === ФАЙЛЫ ДЛЯ ХРАНЕНИЯ ===
 USERS_FILE = '/tmp/users.json'
 BANNED_FILE = '/tmp/banned.json'
 CHATS_PREFIX = '/tmp/chats_'
@@ -46,6 +44,21 @@ def load_banned():
 def save_banned(banned):
     with open(BANNED_FILE, 'w') as f:
         json.dump(banned, f)
+
+# === ХЕЛПЕР: добавить other в список чатов owner ===
+def add_to_chat_list(owner, other):
+    if not owner or not other or owner == other:
+        return
+    chats_file = f'{CHATS_PREFIX}{owner}.json'
+    if not os.path.exists(chats_file):
+        with open(chats_file, 'w') as f:
+            json.dump([], f)
+    with open(chats_file, 'r') as f:
+        chats = json.load(f)
+    if other not in chats:
+        chats.append(other)
+        with open(chats_file, 'w') as f:
+            json.dump(chats, f)
 
 # === РЕГИСТРАЦИЯ ===
 @app.route('/register', methods=['POST'])
@@ -183,6 +196,11 @@ def dm_chat(user1, user2):
             now = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
             with open(filepath, 'a') as f:
                 f.write(data + '|' + now + '\n')
+            
+            # === Автоматически добавляем обоих в списки чатов друг друга ===
+            add_to_chat_list(user1, user2)
+            add_to_chat_list(user2, user1)
+            
             return 'OK', 200
         return 'Empty', 400
     else:
@@ -192,11 +210,11 @@ def dm_chat(user1, user2):
             content = f.read()
         return content, 200, {'Content-Type': 'text/plain; charset=utf-8'}
 
-# === УДАЛЕНИЕ СООБЩЕНИЯ (для всех / у всех) ===
+# === УДАЛЕНИЕ СООБЩЕНИЯ ===
 @app.route('/delete_message', methods=['POST'])
 def delete_message():
     data = request.get_json()
-    chat_type = data.get('chat_type')       # 'global' или 'dm'
+    chat_type = data.get('chat_type')
     me = data.get('me')
     recipient = data.get('recipient')
     line = data.get('line')
@@ -324,7 +342,7 @@ def upload_video():
         'url': f'https://nemesendger-server.onrender.com/video/{filename}'
     }), 200
 
-# === УДАЛЕНИЕ АККАУНТА (самим пользователем) ===
+# === УДАЛЕНИЕ АККАУНТА ===
 @app.route('/delete_user', methods=['POST'])
 def delete_user():
     data = request.get_json()
@@ -358,10 +376,7 @@ def delete_user():
     
     return jsonify({'status': 'OK'}), 200
 
-# ============================================================
-# === АДМИНКА ================================================
-# ============================================================
-
+# === АДМИНКА ===
 @app.route('/admin/users', methods=['GET'])
 def admin_users():
     pwd = request.args.get('pwd', '')
