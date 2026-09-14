@@ -11,6 +11,7 @@ ADMIN_PASSWORD = "1230908070605gg"
 
 # === ФАЙЛЫ ДЛЯ ХРАНЕНИЯ ===
 USERS_FILE = '/tmp/users.json'
+BANNED_FILE = '/tmp/banned.json'
 CHATS_PREFIX = '/tmp/chats_'
 AVATARS_DIR = '/tmp/avatars'
 VOICE_DIR = '/tmp/voice'
@@ -36,6 +37,16 @@ def save_users(users):
     with open(USERS_FILE, 'w') as f:
         json.dump(users, f)
 
+def load_banned():
+    if not os.path.exists(BANNED_FILE):
+        return []
+    with open(BANNED_FILE, 'r') as f:
+        return json.load(f)
+
+def save_banned(banned):
+    with open(BANNED_FILE, 'w') as f:
+        json.dump(banned, f)
+
 # === РЕГИСТРАЦИЯ ===
 @app.route('/register', methods=['POST'])
 def register():
@@ -52,6 +63,11 @@ def register():
     
     if display_name and len(display_name) > 20:
         return jsonify({'error': 'Имя не более 20 символов'}), 400
+    
+    # === ПРОВЕРКА БАНА ===
+    banned = load_banned()
+    if login in banned:
+        return jsonify({'error': 'Этот логин заблокирован администратором'}), 403
     
     users = load_users()
     
@@ -75,6 +91,11 @@ def login():
     
     if not login or not password:
         return jsonify({'error': 'Логин и пароль обязательны'}), 400
+    
+    # === ПРОВЕРКА БАНА ===
+    banned = load_banned()
+    if login in banned:
+        return jsonify({'error': 'Ваш аккаунт заблокирован администратором'}), 403
     
     users = load_users()
     
@@ -323,6 +344,14 @@ def admin_users():
         })
     return jsonify(result), 200
 
+@app.route('/admin/banned', methods=['GET'])
+def admin_banned():
+    pwd = request.args.get('pwd', '')
+    if pwd != ADMIN_PASSWORD:
+        return jsonify({'error': 'Unauthorized'}), 401
+    
+    return jsonify(load_banned()), 200
+
 @app.route('/admin/delete_user', methods=['POST'])
 def admin_delete_user():
     data = request.get_json()
@@ -346,6 +375,58 @@ def admin_delete_user():
                 os.remove(chats_file)
         except:
             pass
+    
+    return jsonify({'status': 'OK'}), 200
+
+@app.route('/admin/ban_user', methods=['POST'])
+def admin_ban_user():
+    data = request.get_json()
+    if data.get('pwd', '') != ADMIN_PASSWORD:
+        return jsonify({'error': 'Unauthorized'}), 401
+    
+    login = data.get('login')
+    if not login:
+        return jsonify({'error': 'No login'}), 400
+    
+    # Добавляем в бан-лист (если ещё нет)
+    banned = load_banned()
+    if login not in banned:
+        banned.append(login)
+        save_banned(banned)
+    
+    # Удаляем пользователя из users
+    users = load_users()
+    if login in users:
+        del users[login]
+        save_users(users)
+        
+        try:
+            avatar_path = os.path.join(AVATARS_DIR, f"{login}.png")
+            if os.path.exists(avatar_path):
+                os.remove(avatar_path)
+            
+            chats_file = f'{CHATS_PREFIX}{login}.json'
+            if os.path.exists(chats_file):
+                os.remove(chats_file)
+        except:
+            pass
+    
+    return jsonify({'status': 'OK'}), 200
+
+@app.route('/admin/unban_user', methods=['POST'])
+def admin_unban_user():
+    data = request.get_json()
+    if data.get('pwd', '') != ADMIN_PASSWORD:
+        return jsonify({'error': 'Unauthorized'}), 401
+    
+    login = data.get('login')
+    if not login:
+        return jsonify({'error': 'No login'}), 400
+    
+    banned = load_banned()
+    if login in banned:
+        banned.remove(login)
+        save_banned(banned)
     
     return jsonify({'status': 'OK'}), 200
 
