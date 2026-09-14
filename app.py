@@ -6,8 +6,16 @@ import datetime
 
 app = Flask(__name__)
 
+# === МОСКОВСКОЕ ВРЕМЯ (UTC+3) ===
+MSK = datetime.timezone(datetime.timedelta(hours=3))
+
+def now_msk():
+    return datetime.datetime.now(MSK).strftime("%Y-%m-%d %H:%M:%S")
+
+# === ПАРОЛЬ АДМИНА ===
 ADMIN_PASSWORD = "1230908070605gg"
 
+# === ФАЙЛЫ ДЛЯ ХРАНЕНИЯ ===
 USERS_FILE = '/tmp/users.json'
 BANNED_FILE = '/tmp/banned.json'
 CHATS_PREFIX = '/tmp/chats_'
@@ -170,7 +178,7 @@ def messages():
     if request.method == 'POST':
         data = request.get_data(as_text=True).strip()
         if data:
-            now = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            now = now_msk()
             with open(MESSAGES_FILE, 'a') as f:
                 f.write(data + '|' + now + '\n')
             return 'OK', 200
@@ -192,7 +200,7 @@ def dm_chat(user1, user2):
     if request.method == 'POST':
         data = request.get_data(as_text=True).strip()
         if data:
-            now = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            now = now_msk()
             with open(filepath, 'a') as f:
                 f.write(data + '|' + now + '\n')
             add_to_chat_list(user1, user2)
@@ -240,12 +248,11 @@ def delete_message():
 
     return jsonify({'status': 'OK'}), 200
 
-# === ГАЛОЧКИ ===
 @app.route('/read/<chat_id>/<user>', methods=['GET', 'POST'])
 def read_status(chat_id, user):
     filepath = os.path.join(READ_DIR, f"{chat_id}_{user}.txt")
     if request.method == 'POST':
-        now = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        now = now_msk()
         with open(filepath, 'w') as f:
             f.write(now)
         return 'OK', 200
@@ -255,12 +262,11 @@ def read_status(chat_id, user):
         with open(filepath, 'r') as f:
             return f.read(), 200
 
-# === ОНЛАЙН-СТАТУС ===
 @app.route('/online/<user>', methods=['GET', 'POST'])
 def online_status(user):
     filepath = os.path.join(ONLINE_DIR, f"{user}.txt")
     if request.method == 'POST':
-        now = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        now = now_msk()
         with open(filepath, 'w') as f:
             f.write(now)
         return 'OK', 200
@@ -270,7 +276,6 @@ def online_status(user):
         with open(filepath, 'r') as f:
             return f.read(), 200
 
-# === АВАТАРКИ ===
 @app.route('/avatar/<login>', methods=['POST'])
 def save_avatar(login):
     data = request.get_json()
@@ -298,7 +303,6 @@ def get_avatar(login):
         return '', 404
     return send_file(filepath, mimetype='image/png')
 
-# === ГОЛОСОВЫЕ ===
 @app.route('/voice/<filename>', methods=['GET'])
 def get_voice(filename):
     filepath = os.path.join(VOICE_DIR, filename)
@@ -312,7 +316,7 @@ def upload_voice():
         return jsonify({'error': 'No audio file'}), 400
 
     file = request.files['audio']
-    filename = f"{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}_{file.filename}"
+    filename = f"{datetime.datetime.now(MSK).strftime('%Y%m%d_%H%M%S')}_{file.filename}"
     filepath = os.path.join(VOICE_DIR, filename)
     file.save(filepath)
 
@@ -321,7 +325,6 @@ def upload_voice():
         'url': f'https://nemesendger-server.onrender.com/voice/{filename}'
     }), 200
 
-# === ФОТО ===
 @app.route('/photo/<filename>', methods=['GET'])
 def get_photo(filename):
     filepath = os.path.join(PHOTOS_DIR, filename)
@@ -335,7 +338,7 @@ def upload_photo():
         return jsonify({'error': 'No photo'}), 400
 
     file = request.files['photo']
-    filename = f"{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}_{file.filename}"
+    filename = f"{datetime.datetime.now(MSK).strftime('%Y%m%d_%H%M%S')}_{file.filename}"
     filepath = os.path.join(PHOTOS_DIR, filename)
     file.save(filepath)
 
@@ -344,7 +347,6 @@ def upload_photo():
         'url': f'https://nemesendger-server.onrender.com/photo/{filename}'
     }), 200
 
-# === ВИДЕО ===
 @app.route('/video/<filename>', methods=['GET'])
 def get_video(filename):
     filepath = os.path.join(VIDEO_DIR, filename)
@@ -358,7 +360,7 @@ def upload_video():
         return jsonify({'error': 'No video'}), 400
 
     file = request.files['video']
-    filename = f"{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}_{file.filename}"
+    filename = f"{datetime.datetime.now(MSK).strftime('%Y%m%d_%H%M%S')}_{file.filename}"
     filepath = os.path.join(VIDEO_DIR, filename)
     file.save(filepath)
 
@@ -400,10 +402,7 @@ def delete_user():
 
     return jsonify({'status': 'OK'}), 200
 
-# ============================================================
-# === АДМИНКА ================================================
-# ============================================================
-
+# === АДМИНКА ===
 @app.route('/admin/users', methods=['GET'])
 def admin_users():
     pwd = request.args.get('pwd', '')
