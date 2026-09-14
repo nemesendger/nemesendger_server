@@ -22,6 +22,7 @@ PHOTOS_DIR = '/tmp/photos'
 VIDEO_DIR = '/tmp/video'
 READ_DIR = '/tmp/read'
 ONLINE_DIR = '/tmp/online'
+TYPING_DIR = '/tmp/typing'
 
 if not os.path.exists(AVATARS_DIR):
     os.makedirs(AVATARS_DIR)
@@ -35,6 +36,8 @@ if not os.path.exists(READ_DIR):
     os.makedirs(READ_DIR)
 if not os.path.exists(ONLINE_DIR):
     os.makedirs(ONLINE_DIR)
+if not os.path.exists(TYPING_DIR):
+    os.makedirs(TYPING_DIR)
 
 def load_users():
     if not os.path.exists(USERS_FILE):
@@ -262,6 +265,21 @@ def read_status(chat_id, user):
 @app.route('/online/<user>', methods=['GET', 'POST'])
 def online_status(user):
     filepath = os.path.join(ONLINE_DIR, f"{user}.txt")
+    if request.method == 'POST':
+        now = now_msk()
+        with open(filepath, 'w') as f:
+            f.write(now)
+        return 'OK', 200
+    else:
+        if not os.path.exists(filepath):
+            return '', 200
+        with open(filepath, 'r') as f:
+            return f.read(), 200
+
+# === ПЕЧАТАЕТ ===
+@app.route('/typing/<chat_id>/<user>', methods=['GET', 'POST'])
+def typing_status(chat_id, user):
+    filepath = os.path.join(TYPING_DIR, f"{chat_id}_{user}.txt")
     if request.method == 'POST':
         now = now_msk()
         with open(filepath, 'w') as f:
