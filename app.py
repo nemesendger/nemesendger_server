@@ -227,6 +227,27 @@ def dm_chat(user1, user2):
             content = f.read()
         return content, 200, {'Content-Type': 'text/plain; charset=utf-8'}
 
+# === ЧАТ АДМИНИСТРАЦИИ ===
+@app.route('/admin_chat.txt', methods=['GET', 'POST'])
+def admin_chat():
+    FILE = '/tmp/admin_chat.txt'
+    if not os.path.exists(FILE):
+        with open(FILE, 'w') as f:
+            f.write('')
+
+    if request.method == 'POST':
+        data = request.get_data(as_text=True).strip()
+        if data:
+            now = now_msk()
+            with open(FILE, 'a') as f:
+                f.write(data + '|' + now + '\n')
+            return 'OK', 200
+        return 'Empty', 400
+    else:
+        with open(FILE, 'r') as f:
+            content = f.read()
+        return content, 200, {'Content-Type': 'text/plain; charset=utf-8'}
+
 @app.route('/delete_message', methods=['POST'])
 def delete_message():
     data = request.get_json()
@@ -238,6 +259,8 @@ def delete_message():
         return jsonify({'error': 'Missing params'}), 400
     if chat_type == 'global':
         filepath = '/tmp/messages.txt'
+    elif chat_type == 'admin':
+        filepath = '/tmp/admin_chat.txt'
     elif chat_type == 'dm':
         if not me or not recipient:
             return jsonify({'error': 'Missing users'}), 400
