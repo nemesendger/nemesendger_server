@@ -64,7 +64,6 @@ def register():
     if display_name and len(display_name) > 20:
         return jsonify({'error': 'Имя не более 20 символов'}), 400
     
-    # === ПРОВЕРКА БАНА ===
     banned = load_banned()
     if login in banned:
         return jsonify({'error': 'Этот логин заблокирован администратором'}), 403
@@ -92,7 +91,6 @@ def login():
     if not login or not password:
         return jsonify({'error': 'Логин и пароль обязательны'}), 400
     
-    # === ПРОВЕРКА БАНА ===
     banned = load_banned()
     if login in banned:
         return jsonify({'error': 'Ваш аккаунт заблокирован администратором'}), 403
@@ -193,6 +191,41 @@ def dm_chat(user1, user2):
         with open(filepath, 'r') as f:
             content = f.read()
         return content, 200, {'Content-Type': 'text/plain; charset=utf-8'}
+
+# === УДАЛЕНИЕ СООБЩЕНИЯ (для всех / у всех) ===
+@app.route('/delete_message', methods=['POST'])
+def delete_message():
+    data = request.get_json()
+    chat_type = data.get('chat_type')       # 'global' или 'dm'
+    me = data.get('me')
+    recipient = data.get('recipient')
+    line = data.get('line')
+    
+    if not chat_type or not line:
+        return jsonify({'error': 'Missing params'}), 400
+    
+    if chat_type == 'global':
+        filepath = '/tmp/messages.txt'
+    elif chat_type == 'dm':
+        if not me or not recipient:
+            return jsonify({'error': 'Missing users'}), 400
+        key = '_'.join(sorted([me.lower(), recipient.lower()]))
+        filepath = f'/tmp/chats/{key}.txt'
+    else:
+        return jsonify({'error': 'Bad chat_type'}), 400
+    
+    if not os.path.exists(filepath):
+        return jsonify({'status': 'OK'}), 200
+    
+    with open(filepath, 'r') as f:
+        lines = f.readlines()
+    
+    new_lines = [l for l in lines if l.rstrip('\n') != line]
+    
+    with open(filepath, 'w') as f:
+        f.writelines(new_lines)
+    
+    return jsonify({'status': 'OK'}), 200
 
 # === АВАТАРКИ ===
 @app.route('/avatar/<login>', methods=['POST'])
@@ -388,13 +421,11 @@ def admin_ban_user():
     if not login:
         return jsonify({'error': 'No login'}), 400
     
-    # Добавляем в бан-лист (если ещё нет)
     banned = load_banned()
     if login not in banned:
         banned.append(login)
         save_banned(banned)
     
-    # Удаляем пользователя из users
     users = load_users()
     if login in users:
         del users[login]
