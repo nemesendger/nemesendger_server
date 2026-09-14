@@ -129,7 +129,6 @@ def get_users():
     users = load_users()
     return jsonify(list(users.keys())), 200
 
-# === РОЛИ ===
 @app.route('/admins', methods=['GET'])
 def get_admins():
     return jsonify(load_admins()), 200
@@ -184,6 +183,64 @@ def add_chat(login):
     add_to_chat_list(login, chat_user)
     return jsonify({'status': 'OK'}), 200
 
+@app.route('/unread/<login>', methods=['GET'])
+def get_unread(login):
+    chats_file = f'{CHATS_PREFIX}{login}.json'
+    if not os.path.exists(chats_file):
+        return jsonify({}), 200
+
+    with open(chats_file, 'r') as f:
+        chats = json.load(f)
+
+    result = {}
+    CHATS_DIR = '/tmp/chats'
+
+    for recipient in chats:
+        if recipient == login:
+            continue
+
+        key = '_'.join(sorted([login.lower(), recipient.lower()]))
+        chat_file = os.path.join(CHATS_DIR, f"{key}.txt")
+
+        if not os.path.exists(chat_file):
+            result[recipient] = 0
+            continue
+
+        read_file = os.path.join(READ_DIR, f"{key}_{login}.txt")
+        read_time = ""
+        if os.path.exists(read_file):
+            with open(read_file, 'r') as rf:
+                read_time = rf.read().strip()
+
+        count = 0
+        try:
+            with open(chat_file, 'r') as cf:
+                for line in cf:
+                    line = line.strip()
+                    if not line:
+                        continue
+                    parts = line.split('|')
+                    if len(parts) < 2:
+                        continue
+                    msg_part = parts[0]
+                    msg_time = parts[1]
+
+                    if ': ' not in msg_part:
+                        continue
+                    sender = msg_part.split(': ', 1)[0]
+
+                    if sender == login:
+                        continue
+
+                    if not read_time or msg_time > read_time:
+                        count += 1
+        except:
+            count = 0
+
+        result[recipient] = count
+
+    return jsonify(result), 200
+
 @app.route('/messages.txt', methods=['GET', 'POST'])
 def messages():
     MESSAGES_FILE = '/tmp/messages.txt'
@@ -227,7 +284,6 @@ def dm_chat(user1, user2):
             content = f.read()
         return content, 200, {'Content-Type': 'text/plain; charset=utf-8'}
 
-# === ЧАТ АДМИНИСТРАЦИИ ===
 @app.route('/admin_chat.txt', methods=['GET', 'POST'])
 def admin_chat():
     FILE = '/tmp/admin_chat.txt'
@@ -419,7 +475,6 @@ def delete_user():
         pass
     return jsonify({'status': 'OK'}), 200
 
-# === АДМИНКА ===
 @app.route('/admin/users', methods=['GET'])
 def admin_users():
     pwd = request.args.get('pwd', '')
