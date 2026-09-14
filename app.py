@@ -259,21 +259,13 @@ def read_status(chat_id, user):
         with open(filepath, 'r') as f:
             return f.read(), 200
 
-# === ОНЛАЙН-СТАТУС (ОБНОВЛЁННЫЙ) ===
 @app.route('/online/<user>', methods=['GET', 'POST'])
 def online_status(user):
     filepath = os.path.join(ONLINE_DIR, f"{user}.txt")
     if request.method == 'POST':
-        body = request.get_data(as_text=True).strip()
-        if body == 'offline':
-            # Ставим время "минус 5 минут" — клиент сразу видит офлайн
-            past = datetime.datetime.now(MSK) - datetime.timedelta(minutes=5)
-            with open(filepath, 'w') as f:
-                f.write(past.strftime("%Y-%m-%d %H:%M:%S"))
-        else:
-            now = now_msk()
-            with open(filepath, 'w') as f:
-                f.write(now)
+        now = now_msk()
+        with open(filepath, 'w') as f:
+            f.write(now)
         return 'OK', 200
     else:
         if not os.path.exists(filepath):
