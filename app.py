@@ -6,8 +6,10 @@ import datetime
 
 app = Flask(__name__)
 
+# === ПАРОЛЬ АДМИНА ===
 ADMIN_PASSWORD = "1230908070605gg"
 
+# === ФАЙЛЫ ДЛЯ ХРАНЕНИЯ ===
 USERS_FILE = '/tmp/users.json'
 BANNED_FILE = '/tmp/banned.json'
 CHATS_PREFIX = '/tmp/chats_'
@@ -15,6 +17,7 @@ AVATARS_DIR = '/tmp/avatars'
 VOICE_DIR = '/tmp/voice'
 PHOTOS_DIR = '/tmp/photos'
 VIDEO_DIR = '/tmp/video'
+READ_DIR = '/tmp/read'
 
 if not os.path.exists(AVATARS_DIR):
     os.makedirs(AVATARS_DIR)
@@ -24,6 +27,8 @@ if not os.path.exists(PHOTOS_DIR):
     os.makedirs(PHOTOS_DIR)
 if not os.path.exists(VIDEO_DIR):
     os.makedirs(VIDEO_DIR)
+if not os.path.exists(READ_DIR):
+    os.makedirs(READ_DIR)
 
 def load_users():
     if not os.path.exists(USERS_FILE):
@@ -197,7 +202,7 @@ def dm_chat(user1, user2):
             with open(filepath, 'a') as f:
                 f.write(data + '|' + now + '\n')
             
-            # === Автоматически добавляем обоих в списки чатов друг друга ===
+            # Автоматически добавляем обоих в списки чатов друг друга
             add_to_chat_list(user1, user2)
             add_to_chat_list(user2, user1)
             
@@ -244,6 +249,21 @@ def delete_message():
         f.writelines(new_lines)
     
     return jsonify({'status': 'OK'}), 200
+
+# === ГАЛОЧКИ ПРОЧТЕНИЯ ===
+@app.route('/read/<chat_id>/<user>', methods=['GET', 'POST'])
+def read_status(chat_id, user):
+    filepath = os.path.join(READ_DIR, f"{chat_id}_{user}.txt")
+    if request.method == 'POST':
+        now = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        with open(filepath, 'w') as f:
+            f.write(now)
+        return 'OK', 200
+    else:
+        if not os.path.exists(filepath):
+            return '', 200
+        with open(filepath, 'r') as f:
+            return f.read(), 200
 
 # === АВАТАРКИ ===
 @app.route('/avatar/<login>', methods=['POST'])
@@ -376,7 +396,10 @@ def delete_user():
     
     return jsonify({'status': 'OK'}), 200
 
-# === АДМИНКА ===
+# ============================================================
+# === АДМИНКА ================================================
+# ============================================================
+
 @app.route('/admin/users', methods=['GET'])
 def admin_users():
     pwd = request.args.get('pwd', '')
