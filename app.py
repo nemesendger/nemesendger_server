@@ -3,11 +3,14 @@
 
 import os
 import json
-from datetime import datetime
+from datetime import datetime, timezone, timedelta
 from flask import Flask, request, jsonify, send_from_directory
 from werkzeug.utils import secure_filename
 
 app = Flask(__name__)
+
+# Часовой пояс сервера (Москва = UTC+3)
+LOCAL_TZ = timezone(timedelta(hours=3))
 
 # =========================================================
 # ПАПКИ И ФАЙЛЫ
@@ -55,7 +58,7 @@ def save_json(path, data):
 
 
 def now_str():
-    return datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+    return datetime.now(LOCAL_TZ).strftime('%Y-%m-%d %H:%M:%S')
 
 
 def dm_path(u1, u2):
@@ -544,7 +547,7 @@ def upload_photo():
         return jsonify({'ok': False}), 400
 
     f = request.files['photo']
-    name = 'photo_' + str(int(datetime.now().timestamp())) + '_' + secure_filename(f.filename)
+    name = 'photo_' + str(int(datetime.now(LOCAL_TZ).timestamp())) + '_' + secure_filename(f.filename)
     f.save(os.path.join(UPLOAD_DIR, name))
     return jsonify({'url': full_url('/uploads/' + name)})
 
@@ -555,7 +558,7 @@ def upload_video():
         return jsonify({'ok': False}), 400
 
     f = request.files['video']
-    name = 'video_' + str(int(datetime.now().timestamp())) + '_' + secure_filename(f.filename)
+    name = 'video_' + str(int(datetime.now(LOCAL_TZ).timestamp())) + '_' + secure_filename(f.filename)
     f.save(os.path.join(UPLOAD_DIR, name))
     return jsonify({'url': full_url('/uploads/' + name)})
 
@@ -566,7 +569,7 @@ def upload_voice():
         return jsonify({'ok': False}), 400
 
     f = request.files['audio']
-    name = 'voice_' + str(int(datetime.now().timestamp())) + '_' + secure_filename(f.filename)
+    name = 'voice_' + str(int(datetime.now(LOCAL_TZ).timestamp())) + '_' + secure_filename(f.filename)
     f.save(os.path.join(UPLOAD_DIR, name))
     return jsonify({'url': full_url('/uploads/' + name)})
 
@@ -594,7 +597,7 @@ def avatar_upload(login):
         return jsonify({'ok': False}), 400
 
     f = request.files['avatar']
-    name = 'avatar_' + login.lower() + '_' + str(int(datetime.now().timestamp())) + '_' + secure_filename(f.filename)
+    name = 'avatar_' + login.lower() + '_' + str(int(datetime.now(LOCAL_TZ).timestamp())) + '_' + secure_filename(f.filename)
     f.save(os.path.join(UPLOAD_DIR, name))
 
     avatars = load_json(AVATARS_FILE, {})
