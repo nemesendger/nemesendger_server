@@ -26,8 +26,9 @@ READ_DIR = '/tmp/read'
 ONLINE_DIR = '/tmp/online'
 TYPING_DIR = '/tmp/typing'
 REACTIONS_DIR = '/tmp/reactions'
+SUPPORT_DIR = '/tmp/support'
 
-for d in [AVATARS_DIR, VOICE_DIR, PHOTOS_DIR, VIDEO_DIR, READ_DIR, ONLINE_DIR, TYPING_DIR, REACTIONS_DIR]:
+for d in [AVATARS_DIR, VOICE_DIR, PHOTOS_DIR, VIDEO_DIR, READ_DIR, ONLINE_DIR, TYPING_DIR, REACTIONS_DIR, SUPPORT_DIR]:
     if not os.path.exists(d):
         os.makedirs(d)
 
@@ -84,11 +85,10 @@ def ensure_support_account():
             'displayName': 'Техподдержка'
         }
         save_users(users)
-        print(f'✅ Аккаунт поддержки {OWNER_LOGIN} создан')
 
 ensure_support_account()
 
-# ==================== РЕАКЦИИ (хелперы) ====================
+# ==================== РЕАКЦИИ ====================
 def reactions_file(chat_id):
     safe = chat_id.replace('/', '_').replace('\\', '_')
     return os.path.join(REACTIONS_DIR, f'{safe}.json')
@@ -108,7 +108,7 @@ def save_reactions(chat_id, data):
     with open(path, 'w') as f:
         json.dump(data, f)
 
-# ==================== РЕГИСТРАЦИЯ / ЛОГИН ====================
+# ==================== РЕГИСТРАЦИЯ ====================
 @app.route('/register', methods=['POST'])
 def register():
     data = request.get_json()
@@ -122,18 +122,14 @@ def register():
         return jsonify({'error': 'Логин не более 20 символов'}), 400
     if display_name and len(display_name) > 20:
         return jsonify({'error': 'Имя не более 20 символов'}), 400
-
     if login in load_banned():
-        return jsonify({'error': 'Этот логин заблокирован администратором'}), 403
+        return jsonify({'error': 'Этот логин заблокирован'}), 403
 
     users = load_users()
     if login in users:
         return jsonify({'error': 'Пользователь уже существует'}), 400
 
-    users[login] = {
-        'password': password,
-        'displayName': display_name or login
-    }
+    users[login] = {'password': password, 'displayName': display_name or login}
     save_users(users)
     return jsonify({'status': 'OK'}), 200
 
@@ -146,7 +142,7 @@ def login():
     if not login or not password:
         return jsonify({'error': 'Логин и пароль обязательны'}), 400
     if login in load_banned():
-        return jsonify({'error': 'Ваш аккаунт заблокирован администратором'}), 403
+        return jsonify({'error': 'Аккаунт заблокирован'}), 403
 
     users = load_users()
     if login not in users:
@@ -161,8 +157,7 @@ def login():
 
 @app.route('/users', methods=['GET'])
 def get_users():
-    users = load_users()
-    return jsonify(list(users.keys())), 200
+    return jsonify(list(load_users().keys())), 200
 
 @app.route('/admins', methods=['GET'])
 def get_admins():
@@ -173,18 +168,15 @@ def admin_add_admin():
     data = request.get_json()
     if data.get('pwd', '') != ADMIN_PASSWORD:
         return jsonify({'error': 'Unauthorized'}), 401
-
     login = data.get('login')
     if not login:
         return jsonify({'error': 'No login'}), 400
     if login == OWNER_LOGIN:
         return jsonify({'error': 'Владелец уже владелец'}), 400
-
     admins = load_admins()
     if login not in admins:
         admins.append(login)
         save_admins(admins)
-
     return jsonify({'status': 'OK'}), 200
 
 @app.route('/admin/remove_admin', methods=['POST'])
@@ -192,13 +184,11 @@ def admin_remove_admin():
     data = request.get_json()
     if data.get('pwd', '') != ADMIN_PASSWORD:
         return jsonify({'error': 'Unauthorized'}), 401
-
     login = data.get('login')
     admins = load_admins()
     if login in admins:
         admins.remove(login)
         save_admins(admins)
-
     return jsonify({'status': 'OK'}), 200
 
 @app.route('/chats/<login>', methods=['GET'])
@@ -223,30 +213,23 @@ def get_unread(login):
     chats_file = f'{CHATS_PREFIX}{login}.json'
     if not os.path.exists(chats_file):
         return jsonify({}), 200
-
     with open(chats_file, 'r') as f:
         chats = json.load(f)
-
     result = {}
     CHATS_DIR = '/tmp/chats'
-
     for recipient in chats:
         if recipient == login:
             continue
-
         key = '_'.join(sorted([login.lower(), recipient.lower()]))
         chat_file = os.path.join(CHATS_DIR, f"{key}.txt")
-
         if not os.path.exists(chat_file):
             result[recipient] = 0
             continue
-
         read_file = os.path.join(READ_DIR, f"{key}_{login}.txt")
         read_time = ""
         if os.path.exists(read_file):
             with open(read_file, 'r') as rf:
                 read_time = rf.read().strip()
-
         count = 0
         try:
             with open(chat_file, 'r') as cf:
@@ -259,21 +242,16 @@ def get_unread(login):
                         continue
                     msg_part = parts[0]
                     msg_time = parts[1]
-
                     if ': ' not in msg_part:
                         continue
                     sender = msg_part.split(': ', 1)[0]
-
                     if sender == login:
                         continue
-
                     if not read_time or msg_time > read_time:
                         count += 1
         except:
             count = 0
-
         result[recipient] = count
-
     return jsonify(result), 200
 
 @app.route('/messages.txt', methods=['GET', 'POST'])
@@ -295,12 +273,38 @@ def messages():
             content = f.read()
         return content, 200, {'Content-Type': 'text/plain; charset=utf-8'}
 
+# ==================== ЛИЧНЫЕ СООБЩЕНИЯ + ПОДДЕРЖКА ====================
 @app.route('/dm/<user1>/<user2>', methods=['GET', 'POST'])
 def dm_chat(user1, user2):
+    u1 = user1.lower()
+    u2 = user2.lower()
+    owner = OWNER_LOGIN.lower()
+
+    # === ПОДДЕРЖКА ===
+    if u1 == owner or u2 == owner:
+        user = u2 if u1 == owner else u1
+        filepath = os.path.join(SUPPORT_DIR, f'{user}.txt')
+
+        if request.method == 'POST':
+            data = request.get_data(as_text=True).strip()
+            if data:
+                now = now_msk()
+                with open(filepath, 'a') as f:
+                    f.write(data + '|' + now + '\n')
+                return 'OK', 200
+            return 'Empty', 400
+        else:
+            if not os.path.exists(filepath):
+                return '', 200
+            with open(filepath, 'r') as f:
+                content = f.read()
+            return content, 200, {'Content-Type': 'text/plain; charset=utf-8'}
+
+    # === ОБЫЧНЫЙ ЧАТ ===
     CHATS_DIR = '/tmp/chats'
     if not os.path.exists(CHATS_DIR):
         os.makedirs(CHATS_DIR)
-    key = '_'.join(sorted([user1.lower(), user2.lower()]))
+    key = '_'.join(sorted([u1, u2]))
     filepath = os.path.join(CHATS_DIR, f"{key}.txt")
     if request.method == 'POST':
         data = request.get_data(as_text=True).strip()
@@ -319,13 +323,24 @@ def dm_chat(user1, user2):
             content = f.read()
         return content, 200, {'Content-Type': 'text/plain; charset=utf-8'}
 
+# ==================== СПИСОК ЖАЛОБ ====================
+@app.route('/support_list', methods=['GET'])
+def support_list():
+    if not os.path.exists(SUPPORT_DIR):
+        return jsonify([]), 200
+    users = []
+    for fname in os.listdir(SUPPORT_DIR):
+        if fname.endswith('.txt'):
+            users.append(fname[:-4])
+    return jsonify(users), 200
+
+# ==================== ADMIN CHAT ====================
 @app.route('/admin_chat.txt', methods=['GET', 'POST'])
 def admin_chat():
     FILE = '/tmp/admin_chat.txt'
     if not os.path.exists(FILE):
         with open(FILE, 'w') as f:
             f.write('')
-
     if request.method == 'POST':
         data = request.get_data(as_text=True).strip()
         if data:
@@ -339,6 +354,7 @@ def admin_chat():
             content = f.read()
         return content, 200, {'Content-Type': 'text/plain; charset=utf-8'}
 
+# ==================== УДАЛЕНИЕ ====================
 @app.route('/delete_message', methods=['POST'])
 def delete_message():
     data = request.get_json()
@@ -352,6 +368,10 @@ def delete_message():
         filepath = '/tmp/messages.txt'
     elif chat_type == 'admin':
         filepath = '/tmp/admin_chat.txt'
+    elif chat_type == 'support':
+        if not recipient:
+            return jsonify({'error': 'Missing user'}), 400
+        filepath = os.path.join(SUPPORT_DIR, f"{recipient.lower()}.txt")
     elif chat_type == 'dm':
         if not me or not recipient:
             return jsonify({'error': 'Missing users'}), 400
@@ -368,6 +388,7 @@ def delete_message():
         f.writelines(new_lines)
     return jsonify({'status': 'OK'}), 200
 
+# ==================== READ / ONLINE / TYPING ====================
 @app.route('/read/<chat_id>/<user>', methods=['GET', 'POST'])
 def read_status(chat_id, user):
     filepath = os.path.join(READ_DIR, f"{chat_id}_{user}.txt")
@@ -408,7 +429,6 @@ def typing_status(chat_id, user):
             return f.read(), 200
 
 # ==================== РЕАКЦИИ ====================
-
 @app.route('/reaction', methods=['POST'])
 def reaction_toggle():
     data = request.get_json() or {}
@@ -416,24 +436,19 @@ def reaction_toggle():
     msg_id = data.get('msg_id', '')
     emoji = data.get('emoji', '')
     user = (data.get('user') or '').lower()
-
     if not chat_id or not msg_id or not emoji or not user:
         return jsonify({'error': 'missing fields'}), 400
-
     reactions = load_reactions(chat_id)
     msg = reactions.setdefault(msg_id, {})
     users = msg.setdefault(emoji, [])
-
     if user in users:
         users.remove(user)
     else:
         users.append(user)
-
     if not users:
         del msg[emoji]
     if not msg:
         del reactions[msg_id]
-
     save_reactions(chat_id, reactions)
     return jsonify({'status': 'OK'}), 200
 
@@ -442,7 +457,6 @@ def reactions_get(chat_id):
     return jsonify(load_reactions(chat_id)), 200
 
 # ==================== ФАЙЛЫ ====================
-
 @app.route('/avatar/<login>', methods=['POST'])
 def save_avatar(login):
     data = request.get_json()
@@ -482,8 +496,7 @@ def upload_voice():
     filename = f"{datetime.datetime.now(MSK).strftime('%Y%m%d_%H%M%S')}_{file.filename}"
     filepath = os.path.join(VOICE_DIR, filename)
     file.save(filepath)
-    return jsonify({'status': 'OK',
-                    'url': f'https://nemesendger-server.onrender.com/voice/{filename}'}), 200
+    return jsonify({'status': 'OK', 'url': f'https://nemesendger-server.onrender.com/voice/{filename}'}), 200
 
 @app.route('/photo/<filename>', methods=['GET'])
 def get_photo(filename):
@@ -500,8 +513,7 @@ def upload_photo():
     filename = f"{datetime.datetime.now(MSK).strftime('%Y%m%d_%H%M%S')}_{file.filename}"
     filepath = os.path.join(PHOTOS_DIR, filename)
     file.save(filepath)
-    return jsonify({'status': 'OK',
-                    'url': f'https://nemesendger-server.onrender.com/photo/{filename}'}), 200
+    return jsonify({'status': 'OK', 'url': f'https://nemesendger-server.onrender.com/photo/{filename}'}), 200
 
 @app.route('/video/<filename>', methods=['GET'])
 def get_video(filename):
@@ -518,9 +530,9 @@ def upload_video():
     filename = f"{datetime.datetime.now(MSK).strftime('%Y%m%d_%H%M%S')}_{file.filename}"
     filepath = os.path.join(VIDEO_DIR, filename)
     file.save(filepath)
-    return jsonify({'status': 'OK',
-                    'url': f'https://nemesendger-server.onrender.com/video/{filename}'}), 200
+    return jsonify({'status': 'OK', 'url': f'https://nemesendger-server.onrender.com/video/{filename}'}), 200
 
+# ==================== АДМИН ====================
 @app.route('/delete_user', methods=['POST'])
 def delete_user():
     data = request.get_json()
@@ -554,10 +566,7 @@ def admin_users():
     users = load_users()
     result = []
     for login, data in users.items():
-        result.append({
-            'login': login,
-            'displayName': data.get('displayName', login)
-        })
+        result.append({'login': login, 'displayName': data.get('displayName', login)})
     return jsonify(result), 200
 
 @app.route('/admin/banned', methods=['GET'])
