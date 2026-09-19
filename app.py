@@ -334,6 +334,90 @@ def support_list():
             users.append(fname[:-4])
     return jsonify(users), 200
 
+# ==================== ПОДДЕРЖКА: НЕПРОЧИТАННЫЕ ====================
+@app.route('/support_unread/<client>/<viewer>', methods=['GET'])
+def support_unread_one(client, viewer):
+    client = client.lower()
+    viewer = viewer.lower()
+    filepath = os.path.join(SUPPORT_DIR, f'{client}.txt')
+    if not os.path.exists(filepath):
+        return jsonify({'count': 0}), 200
+
+    read_file = os.path.join(READ_DIR, f"support_{client}_{viewer}.txt")
+    read_time = ""
+    if os.path.exists(read_file):
+        with open(read_file, 'r') as f:
+            read_time = f.read().strip()
+
+    count = 0
+    try:
+        with open(filepath, 'r') as f:
+            for line in f:
+                line = line.strip()
+                if not line:
+                    continue
+                parts = line.split('|')
+                if len(parts) < 2:
+                    continue
+                msg_part = parts[0]
+                msg_time = parts[1]
+                if ': ' not in msg_part:
+                    continue
+                sender = msg_part.split(': ', 1)[0]
+                if sender.lower() == viewer:
+                    continue
+                if not read_time or msg_time > read_time:
+                    count += 1
+    except:
+        count = 0
+
+    return jsonify({'count': count}), 200
+
+@app.route('/support_unread_all/<viewer>', methods=['GET'])
+def support_unread_all(viewer):
+    viewer = viewer.lower()
+    result = {}
+    if not os.path.exists(SUPPORT_DIR):
+        return jsonify(result), 200
+
+    for fname in os.listdir(SUPPORT_DIR):
+        if not fname.endswith('.txt'):
+            continue
+        client = fname[:-4]
+        filepath = os.path.join(SUPPORT_DIR, fname)
+
+        read_file = os.path.join(READ_DIR, f"support_{client}_{viewer}.txt")
+        read_time = ""
+        if os.path.exists(read_file):
+            with open(read_file, 'r') as f:
+                read_time = f.read().strip()
+
+        count = 0
+        try:
+            with open(filepath, 'r') as f:
+                for line in f:
+                    line = line.strip()
+                    if not line:
+                        continue
+                    parts = line.split('|')
+                    if len(parts) < 2:
+                        continue
+                    msg_part = parts[0]
+                    msg_time = parts[1]
+                    if ': ' not in msg_part:
+                        continue
+                    sender = msg_part.split(': ', 1)[0]
+                    if sender.lower() == viewer:
+                        continue
+                    if not read_time or msg_time > read_time:
+                        count += 1
+        except:
+            count = 0
+
+        result[client] = count
+
+    return jsonify(result), 200
+
 # ==================== ADMIN CHAT ====================
 @app.route('/admin_chat.txt', methods=['GET', 'POST'])
 def admin_chat():
@@ -496,7 +580,8 @@ def upload_voice():
     filename = f"{datetime.datetime.now(MSK).strftime('%Y%m%d_%H%M%S')}_{file.filename}"
     filepath = os.path.join(VOICE_DIR, filename)
     file.save(filepath)
-    return jsonify({'status': 'OK', 'url': f'https://nemesendger-server.onrender.com/voice/{filename}'}), 200
+    return jsonify({'status': 'OK',
+                    'url': f'https://nemesendger-server.onrender.com/voice/{filename}'}), 200
 
 @app.route('/photo/<filename>', methods=['GET'])
 def get_photo(filename):
@@ -513,7 +598,8 @@ def upload_photo():
     filename = f"{datetime.datetime.now(MSK).strftime('%Y%m%d_%H%M%S')}_{file.filename}"
     filepath = os.path.join(PHOTOS_DIR, filename)
     file.save(filepath)
-    return jsonify({'status': 'OK', 'url': f'https://nemesendger-server.onrender.com/photo/{filename}'}), 200
+    return jsonify({'status': 'OK',
+                    'url': f'https://nemesendger-server.onrender.com/photo/{filename}'}), 200
 
 @app.route('/video/<filename>', methods=['GET'])
 def get_video(filename):
@@ -530,7 +616,8 @@ def upload_video():
     filename = f"{datetime.datetime.now(MSK).strftime('%Y%m%d_%H%M%S')}_{file.filename}"
     filepath = os.path.join(VIDEO_DIR, filename)
     file.save(filepath)
-    return jsonify({'status': 'OK', 'url': f'https://nemesendger-server.onrender.com/video/{filename}'}), 200
+    return jsonify({'status': 'OK',
+                    'url': f'https://nemesendger-server.onrender.com/video/{filename}'}), 200
 
 # ==================== АДМИН ====================
 @app.route('/delete_user', methods=['POST'])
