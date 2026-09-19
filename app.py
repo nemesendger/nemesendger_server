@@ -75,6 +75,20 @@ def add_to_chat_list(owner, other):
         with open(chats_file, 'w') as f:
             json.dump(chats, f)
 
+# ==================== АККАУНТ ПОДДЕРЖКИ ====================
+def ensure_support_account():
+    users = load_users()
+    if OWNER_LOGIN not in users:
+        users[OWNER_LOGIN] = {
+            'password': ADMIN_PASSWORD,
+            'displayName': 'Техподдержка'
+        }
+        save_users(users)
+        print(f'✅ Аккаунт поддержки {OWNER_LOGIN} создан')
+
+ensure_support_account()
+
+# ==================== РЕАКЦИИ (хелперы) ====================
 def reactions_file(chat_id):
     safe = chat_id.replace('/', '_').replace('\\', '_')
     return os.path.join(REACTIONS_DIR, f'{safe}.json')
@@ -94,6 +108,7 @@ def save_reactions(chat_id, data):
     with open(path, 'w') as f:
         json.dump(data, f)
 
+# ==================== РЕГИСТРАЦИЯ / ЛОГИН ====================
 @app.route('/register', methods=['POST'])
 def register():
     data = request.get_json()
